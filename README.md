@@ -1,2 +1,2 @@
-# kroger-clipper
-A Firefox extension to scroll page and clip coupons automatically.
+# Kroger Clipper
+An extension to scroll the coupons page and clip coupons automatically.
