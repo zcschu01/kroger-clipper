@@ -3,7 +3,13 @@
   "name": "Kroger Clipper",
   "version": "1.0",
   "description": "Automatically clips all Kroger coupons on the page.",
-  "permissions": ["scripting", "tabs", "activeTab"],
+  "permissions": ["scripting", "tabs", "activeTab", "storage"],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "kroger-clipper@example.com",
+      "strict_min_version": "109.0"
+    }
+  },
   "action": {
     "default_popup": "popup.html"
   },
