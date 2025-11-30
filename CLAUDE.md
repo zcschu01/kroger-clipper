@@ -37,13 +37,11 @@ Kroger Clipper is a Chrome extension (Manifest V3) that automatically clips all 
 
 The extension uses Kroger's actual category metadata for reliable filtering:
 
+- **Dynamic Discovery**: `extractCategoriesFromPage()` scrapes Kroger's filter UI to discover available categories
 - **Data Attribute**: Reads `data-category` attribute from `.CouponCardNew` elements
-- **Category Mapping**: Maps Kroger categories to filter keys (see `CATEGORY_MAPPINGS` in clipper.js)
-- **Filter Categories**:
-  - **Special**: Gift Cards, Seasonal
-  - **Food**: Produce, Meat, Dairy, Bakery, Frozen, Snacks, Beverages, Breakfast, International, Natural & Organic
-  - **Other**: Personal Care, Health, Cleaning, Baby
-  - **Excluded by Default**: Adult Beverage, Tobacco
+- **Filter Logic**: "Any enabled category allows" - a coupon is clipped if it has ANY enabled category, regardless of disabled categories
+- **Excluded by Default**: Adult Beverage, Tobacco (defined in `EXCLUDED_BY_DEFAULT` constant)
+- **Storage**: Categories stored in `storage.local.availableCategories`, user preferences in `storage.sync.couponFilters`
 
 ### Key Constraints
 
@@ -76,13 +74,36 @@ The extension uses Kroger's actual category metadata for reliable filtering:
 - **Popup logs**: Right-click extension icon → "Inspect popup" (separate DevTools instance)
 - **Message passing**: Check for `chrome.runtime.lastError` if messages fail to send/receive
 
+### Running Tests
+
+The extension has manual test suites that must be run in the browser:
+
+**Content Script Tests** ([clipper.test.js](clipper.test.js)):
+1. Navigate to https://www.kroger.com/savings/cl/coupons/
+2. Open DevTools Console (F12)
+3. **First**: Paste entire [clipper.js](clipper.js) into console and press Enter
+4. **Then**: Paste entire [clipper.test.js](clipper.test.js) into console and press Enter
+5. Run: `runAllClipperTests()`
+
+**Popup Tests** ([popup.test.js](popup.test.js)):
+1. Click extension icon to open popup
+2. Right-click popup → "Inspect" (opens separate DevTools)
+3. Paste [popup.test.js](popup.test.js) into popup's console
+4. Run: `runAllPopupTests()`
+
+See [TESTING.md](TESTING.md) for detailed test documentation and [run-tests.md](run-tests.md) for quick reference.
+
 ## File Structure
 
 ```
 kroger-clipper/
 ├── manifest.json          # Extension manifest (V3)
 ├── clipper.js            # Content script with clipping logic
+├── clipper.test.js       # Content script tests (19 tests)
 ├── popup.html            # Extension popup UI
 ├── popup.js              # Popup behavior and messaging
+├── popup.test.js         # Popup tests (26 tests)
+├── TESTING.md            # Comprehensive testing guide
+├── run-tests.md          # Quick test instructions
 └── icons/                # Extension icons (48x48, 96x96)
 ```
