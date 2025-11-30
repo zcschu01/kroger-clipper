@@ -1,17 +1,18 @@
 {
   "manifest_version": 3,
   "name": "Kroger Clipper",
-  "version": "1.0",
-  "description": "Automatically clips all Kroger coupons on the page.",
-  "permissions": ["scripting", "tabs", "activeTab", "storage"],
+  "version": "1.0.0",
+  "description": "Automatically clips all available Kroger coupons with customizable category filters.",
+  "permissions": ["storage", "activeTab"],
   "browser_specific_settings": {
     "gecko": {
-      "id": "kroger-clipper@example.com",
+      "id": "{f6d8c8e5-9b7a-4c3d-8e2f-1a5b7c9d3e4f}",
       "strict_min_version": "109.0"
     }
   },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_title": "Kroger Coupon Clipper"
   },
   "icons": {
     "48": "icons/icon-48.png",
