@@ -5,78 +5,105 @@ const extensionAPI = (() => {
   return window.browser || window.chrome;
 })();
 
-// Coupon category filters
-const COUPON_FILTERS = {
-  freeItems: true,           // Free items, BOGO, buy X get Y free
-  freshProduce: true,        // Fruits, vegetables
-  meat: true,                // Beef, chicken, pork, seafood
-  dairy: true,               // Milk, cheese, yogurt, eggs
-  bakery: true,              // Bread, baked goods
-  pantryStaples: true,       // Canned goods, pasta, rice, cereal
-  frozenFoods: true,         // Frozen meals, vegetables, ice cream
-  snacks: true,              // Chips, cookies, candy
-  beverages: true,           // Soda, juice, coffee, tea (non-alcoholic)
-  healthBeauty: true,        // Toiletries, cosmetics, vitamins
-  household: true,           // Cleaning supplies, paper products
-  baby: true,                // Diapers, baby food, formula
-  pet: true,                 // Pet food, pet supplies
+// Categories that should be disabled by default
+const EXCLUDED_BY_DEFAULT = ['Adult Beverage', 'Tobacco'];
 
-  // Excluded by default
-  alcohol: false,            // Beer, wine, spirits
-  tobacco: false             // Cigarettes, vaping products
-};
+// Extract available categories from Kroger's filter UI
+function extractCategoriesFromPage() {
+  const categories = [];
+  const filterCheckboxes = document.querySelectorAll('input[data-testid^="Filter-by-"]');
 
-// Keywords for category detection
-const CATEGORY_KEYWORDS = {
-  freeItems: ['free', 'bogo', 'buy one get one', 'buy 1 get 1', 'buy 2 get 1', 'buy two get one'],
-  alcohol: ['beer', 'wine', 'vodka', 'whiskey', 'rum', 'tequila', 'gin', 'champagne', 'liquor', 'spirits', 'cocktail', 'alcoholic'],
-  tobacco: ['cigarette', 'cigar', 'tobacco', 'vape', 'vaping', 'nicotine'],
-  freshProduce: ['fruit', 'vegetable', 'produce', 'apple', 'banana', 'orange', 'lettuce', 'tomato', 'carrot', 'berry', 'salad'],
-  meat: ['beef', 'chicken', 'pork', 'turkey', 'ham', 'bacon', 'sausage', 'seafood', 'fish', 'salmon', 'shrimp', 'steak', 'ground beef'],
-  dairy: ['milk', 'cheese', 'yogurt', 'butter', 'cream', 'eggs', 'dairy'],
-  bakery: ['bread', 'bagel', 'muffin', 'donut', 'cake', 'pastry', 'bakery', 'rolls'],
-  pantryStaples: ['pasta', 'rice', 'cereal', 'canned', 'soup', 'beans', 'sauce', 'oil', 'flour', 'sugar'],
-  frozenFoods: ['frozen', 'ice cream', 'pizza'],
-  snacks: ['chips', 'cookie', 'candy', 'chocolate', 'popcorn', 'crackers', 'snack'],
-  beverages: ['soda', 'juice', 'coffee', 'tea', 'water', 'energy drink', 'lemonade'],
-  healthBeauty: ['shampoo', 'soap', 'toothpaste', 'deodorant', 'cosmetic', 'lotion', 'vitamin', 'medicine'],
-  household: ['detergent', 'cleaner', 'paper towel', 'toilet paper', 'dish soap', 'trash bag'],
-  baby: ['diaper', 'baby food', 'formula', 'wipes', 'baby'],
-  pet: ['dog food', 'cat food', 'pet', 'treats', 'litter']
-};
+  filterCheckboxes.forEach(checkbox => {
+    const label = checkbox.closest('label');
+    if (label) {
+      const categoryText = label.querySelector('span.truncate');
+      if (categoryText) {
+        const categoryName = categoryText.textContent.trim();
+        categories.push(categoryName);
+      }
+    }
+  });
 
-// Active filters (will be updated from popup)
-let activeFilters = { ...COUPON_FILTERS };
+  console.log('[Kroger Clipper] Found categories:', categories);
+  return categories;
+}
+
+// Initialize category filters based on discovered categories
+async function initializeCategoryFilters() {
+  const categories = extractCategoriesFromPage();
+
+  if (categories.length === 0) {
+    console.log('[Kroger Clipper] No categories found, page may not be loaded yet');
+    return null;
+  }
+
+  // Build default filter state
+  const filters = {};
+  categories.forEach(category => {
+    filters[category] = !EXCLUDED_BY_DEFAULT.includes(category);
+  });
+
+  // Store categories in extension storage for popup to use
+  await extensionAPI.storage.local.set({
+    availableCategories: categories,
+    defaultFilters: filters
+  });
+
+  console.log('[Kroger Clipper] Initialized filters:', filters);
+  return filters;
+}
+
+// Active filters (will be updated from popup or initialized from page)
+let activeFilters = {};
 
 function shouldClipCoupon(couponCard) {
-  // Get the coupon text content for analysis
-  const text = couponCard.textContent.toLowerCase();
+  // Check if all filters are disabled (means clip everything)
+  const hasAnyFilterEnabled = Object.values(activeFilters).some(enabled => enabled === true);
 
-  // Check if it matches any disabled category
-  for (const [category, enabled] of Object.entries(activeFilters)) {
-    if (!enabled) {
-      // If category is disabled and matches, reject the coupon
-      const keywords = CATEGORY_KEYWORDS[category] || [];
-      if (keywords.some(keyword => text.includes(keyword))) {
-        console.log(`Skipping coupon (${category}):`, couponCard.textContent.trim().substring(0, 50));
-        return false;
-      }
+  if (!hasAnyFilterEnabled) {
+    console.log('All filters disabled - clipping everything');
+    return true;
+  }
+
+  // Get Kroger's category data from the coupon card
+  const categoryAttr = couponCard.getAttribute('data-category');
+
+  if (!categoryAttr) {
+    // No category data - allow by default
+    console.log('No category data, allowing coupon');
+    return true;
+  }
+
+  // Split categories (Kroger uses comma-separated values)
+  const categories = categoryAttr.split(',').map(c => c.trim()).filter(c => c);
+
+  // If the coupon has ANY enabled category, clip it
+  for (const category of categories) {
+    if (activeFilters[category] === true) {
+      console.log(`Clipping coupon (${category} enabled):`, couponCard.getAttribute('data-testid'));
+      return true;
     }
   }
 
-  // Check if it matches any enabled "priority" categories (like free items)
-  for (const [category, enabled] of Object.entries(activeFilters)) {
-    if (enabled) {
-      const keywords = CATEGORY_KEYWORDS[category] || [];
-      if (keywords.some(keyword => text.includes(keyword))) {
-        console.log(`Clipping coupon (${category}):`, couponCard.textContent.trim().substring(0, 50));
-        return true;
-      }
+  // If we got here, none of the coupon's categories are enabled
+  // Check if coupon has any known categories
+  let hasKnownCategory = false;
+  for (const category of categories) {
+    if (category in activeFilters) {
+      hasKnownCategory = true;
+      break;
     }
   }
 
-  // If no specific category detected, allow by default (unless it's explicitly filtered)
-  return true;
+  // If coupon has no known categories, allow by default
+  if (!hasKnownCategory) {
+    console.log('No known categories, allowing coupon');
+    return true;
+  }
+
+  // All of this coupon's categories are disabled
+  console.log(`Skipping coupon (all categories disabled):`, couponCard.getAttribute('data-testid'));
+  return false;
 }
 
 let shouldStop = false;
@@ -151,8 +178,13 @@ async function clipAllCoupons(totalExpected) {
         return false;
       }
 
-      // Find the coupon card parent element
-      const couponCard = btn.closest('.CouponCard') || btn.closest('[class*="Coupon"]') || btn.parentElement;
+      // Find the coupon card parent element with data-category attribute
+      const couponCard = btn.closest('.CouponCardNew[data-category]');
+
+      if (!couponCard) {
+        // No coupon card found - allow by default
+        return true;
+      }
 
       // Apply category filter
       return shouldClipCoupon(couponCard);
@@ -170,7 +202,10 @@ async function clipAllCoupons(totalExpected) {
     if (totalClipped >= 250) {
       console.warn("250 coupon limit reached — stopping.");
       try {
-        extensionAPI.runtime.sendMessage({ type: "limit-reached" });
+        extensionAPI.runtime.sendMessage({
+          type: "limit-reached",
+          totalClipped: totalClipped
+        });
       } catch {}
       return true;
     }
@@ -189,7 +224,7 @@ async function clipAllCoupons(totalExpected) {
     try {
       extensionAPI.runtime.sendMessage({
         type: "progress",
-        clipped: totalClipped,
+        clipped: clippedThisSession,
         total: totalExpected,
       });
     } catch {}
@@ -198,7 +233,10 @@ async function clipAllCoupons(totalExpected) {
     if (totalClipped >= 250) {
       console.warn("250 coupon limit reached — stopping.");
       try {
-        extensionAPI.runtime.sendMessage({ type: "limit-reached" });
+        extensionAPI.runtime.sendMessage({
+          type: "limit-reached",
+          totalClipped: totalClipped
+        });
       } catch {}
       return true;
     }
@@ -207,18 +245,81 @@ async function clipAllCoupons(totalExpected) {
   return false;
 }
 
+// Count eligible coupons after filtering
+function countEligibleCoupons() {
+  const buttons = Array.from(
+    document.querySelectorAll("button.CouponCard-button")
+  ).filter((btn) => {
+    // Basic button state checks
+    if (btn.textContent.trim() !== "Clip" || btn.disabled || btn.dataset.clipped) {
+      return false;
+    }
+
+    // Find the coupon card parent element with data-category attribute
+    const couponCard = btn.closest('.CouponCardNew[data-category]');
+
+    if (!couponCard) {
+      // No coupon card found - allow by default
+      return true;
+    }
+
+    // Apply category filter
+    return shouldClipCoupon(couponCard);
+  });
+
+  return buttons.length;
+}
+
 async function runClippingWorkflow() {
   totalClipped = 0;
-  const totalExpected =
+  const totalOnPage =
     parseInt(document.querySelector(".CouponCount")?.textContent || "0", 10) ||
     0;
 
-  await scrollToLoadAllCoupons(totalExpected);
-  const hitLimit = await clipAllCoupons(totalExpected);
+  // Scroll to load all coupons
+  await scrollToLoadAllCoupons(totalOnPage);
+
+  // Count eligible coupons after filtering
+  const eligibleCount = countEligibleCoupons();
+  console.log(`[Kroger Clipper] Found ${eligibleCount} eligible coupons out of ${totalOnPage} total`);
+
+  // Clip with accurate count
+  const hitLimit = await clipAllCoupons(eligibleCount);
 
   if (!hitLimit) {
     try {
-      extensionAPI.runtime.sendMessage({ type: "done" });
+      extensionAPI.runtime.sendMessage({
+        type: "done",
+        totalClipped: totalClipped
+      });
     } catch {}
   }
 }
+
+// Initialize categories when page loads
+(async function initializeOnLoad() {
+  // Wait for the page to be fully loaded
+  if (document.readyState === 'loading') {
+    await new Promise(resolve => {
+      document.addEventListener('DOMContentLoaded', resolve);
+    });
+  }
+
+  // Wait a bit for dynamic content to load
+  await new Promise(resolve => setTimeout(resolve, 2000));
+
+  // Extract and initialize categories
+  const filters = await initializeCategoryFilters();
+
+  if (filters) {
+    // Check if user has saved preferences
+    const saved = await extensionAPI.storage.sync.get('couponFilters');
+    if (saved && saved.couponFilters) {
+      activeFilters = saved.couponFilters;
+      console.log('[Kroger Clipper] Loaded saved filters:', activeFilters);
+    } else {
+      activeFilters = filters;
+      console.log('[Kroger Clipper] Using default filters:', activeFilters);
+    }
+  }
+})();

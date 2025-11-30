@@ -48,8 +48,32 @@
     button {
       margin: 5px 0;
       width: 100%;
-      padding: 6px;
+      padding: 8px;
       cursor: pointer;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: white;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #f0f0f0;
+    }
+    #yes {
+      background: #4CAF50;
+      color: white;
+      border: none;
+    }
+    #yes:hover {
+      background: #45a049;
+    }
+    #no {
+      background: #f44336;
+      color: white;
+      border: none;
+    }
+    #no:hover {
+      background: #da190b;
     }
     #progress {
       display: none;
@@ -114,77 +138,10 @@
   <div class="content">
     <button id="toggleFilters">Show Filters</button>
 
-  <div class="filters-section" style="display: none;">
-    <h3>Filter Categories</h3>
-
-    <div class="section-header">Priority</div>
-    <div class="filter-category">
-      <input type="checkbox" id="freeItems" checked>
-      <label for="freeItems">Free Items & BOGO</label>
+    <!-- Filters will be dynamically generated here -->
+    <div class="filters-section" style="display: none;">
+      <p>Loading filters...</p>
     </div>
-
-    <div class="section-header">Food Categories</div>
-    <div class="filter-category">
-      <input type="checkbox" id="freshProduce" checked>
-      <label for="freshProduce">Fresh Produce</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="meat" checked>
-      <label for="meat">Meat & Seafood</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="dairy" checked>
-      <label for="dairy">Dairy & Eggs</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="bakery" checked>
-      <label for="bakery">Bakery</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="pantryStaples" checked>
-      <label for="pantryStaples">Pantry Staples</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="frozenFoods" checked>
-      <label for="frozenFoods">Frozen Foods</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="snacks" checked>
-      <label for="snacks">Snacks</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="beverages" checked>
-      <label for="beverages">Beverages</label>
-    </div>
-
-    <div class="section-header">Other Products</div>
-    <div class="filter-category">
-      <input type="checkbox" id="healthBeauty" checked>
-      <label for="healthBeauty">Health & Beauty</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="household" checked>
-      <label for="household">Household Items</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="baby" checked>
-      <label for="baby">Baby Products</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="pet" checked>
-      <label for="pet">Pet Supplies</label>
-    </div>
-
-    <div class="section-header">Excluded by Default</div>
-    <div class="filter-category">
-      <input type="checkbox" id="alcohol">
-      <label for="alcohol">Alcohol</label>
-    </div>
-    <div class="filter-category">
-      <input type="checkbox" id="tobacco">
-      <label for="tobacco">Tobacco</label>
-    </div>
-  </div>
 
   <div class="buttons-row">
     <button id="yes">Start Clipping</button>

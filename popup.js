@@ -6,11 +6,66 @@ const extensionAPI = (() => {
   return window.browser || window.chrome;
 })();
 
-const FILTER_CATEGORIES = [
-  'freeItems', 'freshProduce', 'meat', 'dairy', 'bakery',
-  'pantryStaples', 'frozenFoods', 'snacks', 'beverages',
-  'healthBeauty', 'household', 'baby', 'pet', 'alcohol', 'tobacco'
-];
+// Categories excluded by default
+const EXCLUDED_BY_DEFAULT = ['Adult Beverage', 'Tobacco'];
+
+// Build filter UI dynamically from discovered categories
+async function buildFilterUI(filtersContainer) {
+  const data = await extensionAPI.storage.local.get(['availableCategories']);
+
+  if (!data.availableCategories || data.availableCategories.length === 0) {
+    filtersContainer.innerHTML = '<p>Loading categories... Please refresh the Kroger page.</p>';
+    return;
+  }
+
+  const categories = data.availableCategories;
+
+  // Sort categories: excluded last, rest alphabetically
+  const sorted = categories.sort((a, b) => {
+    const aExcluded = EXCLUDED_BY_DEFAULT.includes(a);
+    const bExcluded = EXCLUDED_BY_DEFAULT.includes(b);
+
+    if (aExcluded && !bExcluded) return 1;
+    if (!aExcluded && bExcluded) return -1;
+    return a.localeCompare(b);
+  });
+
+  // Build sections
+  const enabled = sorted.filter(c => !EXCLUDED_BY_DEFAULT.includes(c));
+  const excluded = sorted.filter(c => EXCLUDED_BY_DEFAULT.includes(c));
+
+  let html = '<h3>Filter Categories</h3>';
+
+  if (enabled.length > 0) {
+    html += '<div class="section-header">Enabled by Default</div>';
+    enabled.forEach(category => {
+      const id = category.replace(/[^a-zA-Z0-9]/g, '-');
+      html += `
+        <div class="filter-category">
+          <input type="checkbox" id="${id}" data-category="${category}" checked>
+          <label for="${id}">${category}</label>
+        </div>
+      `;
+    });
+  }
+
+  if (excluded.length > 0) {
+    html += '<div class="section-header">Excluded by Default</div>';
+    excluded.forEach(category => {
+      const id = category.replace(/[^a-zA-Z0-9]/g, '-');
+      html += `
+        <div class="filter-category">
+          <input type="checkbox" id="${id}" data-category="${category}">
+          <label for="${id}">${category}</label>
+        </div>
+      `;
+    });
+  }
+
+  filtersContainer.innerHTML = html;
+
+  return categories;
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
   const yesBtn = document.getElementById("yes");
@@ -69,41 +124,48 @@ document.addEventListener("DOMContentLoaded", async () => {
     stopClipping();
   });
 
+  // Build filter UI dynamically
+  const categories = await buildFilterUI(filtersSection);
+
+  // Load saved filter preferences if they exist
+  if (categories) {
+    const saved = await extensionAPI.storage.sync.get('couponFilters');
+    if (saved && saved.couponFilters) {
+      // Apply saved preferences to checkboxes
+      categories.forEach(category => {
+        const id = category.replace(/[^a-zA-Z0-9]/g, '-');
+        const checkbox = document.getElementById(id);
+        if (checkbox && saved.couponFilters[category] !== undefined) {
+          checkbox.checked = saved.couponFilters[category];
+        }
+      });
+    }
+
+    // Add change listeners to all checkboxes
+    categories.forEach(category => {
+      const id = category.replace(/[^a-zA-Z0-9]/g, '-');
+      const checkbox = document.getElementById(id);
+      if (checkbox) {
+        checkbox.addEventListener('change', () => {
+          // Save all filter states
+          const filters = {};
+          categories.forEach(cat => {
+            const catId = cat.replace(/[^a-zA-Z0-9]/g, '-');
+            const cb = document.getElementById(catId);
+            if (cb) filters[cat] = cb.checked;
+          });
+          extensionAPI.storage.sync.set({ couponFilters: filters });
+        });
+      }
+    });
+  }
+
   // Toggle filters visibility
   let filtersVisible = false;
   toggleFiltersBtn.addEventListener("click", () => {
     filtersVisible = !filtersVisible;
     filtersSection.style.display = filtersVisible ? 'block' : 'none';
     toggleFiltersBtn.textContent = filtersVisible ? 'Hide Filters' : 'Show Filters';
-  });
-
-  // Load saved filter preferences
-  extensionAPI.storage.sync.get('couponFilters').then((result) => {
-    const filters = (result && result.couponFilters) || {};
-
-    FILTER_CATEGORIES.forEach(category => {
-      const checkbox = document.getElementById(category);
-      if (checkbox && filters[category] !== undefined) {
-        checkbox.checked = filters[category];
-      }
-    });
-  }).catch((error) => {
-    console.log('[Kroger Clipper] No saved filters, using defaults:', error);
-  });
-
-  // Save filter preferences when changed
-  FILTER_CATEGORIES.forEach(category => {
-    const checkbox = document.getElementById(category);
-    if (checkbox) {
-      checkbox.addEventListener('change', () => {
-        const filters = {};
-        FILTER_CATEGORIES.forEach(cat => {
-          const cb = document.getElementById(cat);
-          if (cb) filters[cat] = cb.checked;
-        });
-        extensionAPI.storage.sync.set({ couponFilters: filters });
-      });
-    }
   });
 
   // Close button handler
@@ -113,14 +175,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   yesBtn.addEventListener("click", async () => {
-    // Collect current filter settings
+    // Collect current filter settings from dynamic checkboxes
     const filters = {};
-    FILTER_CATEGORIES.forEach(category => {
-      const checkbox = document.getElementById(category);
-      if (checkbox) {
-        filters[category] = checkbox.checked;
-      }
-    });
+    if (categories) {
+      categories.forEach(category => {
+        const id = category.replace(/[^a-zA-Z0-9]/g, '-');
+        const checkbox = document.getElementById(id);
+        if (checkbox) {
+          filters[category] = checkbox.checked;
+        }
+      });
+    }
 
     isClipping = true;
     yesBtn.style.display = "none";
@@ -144,10 +209,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       progress.textContent = `Clipping... ${msg.clipped} / ${msg.total}`;
     } else if (msg.type === "done") {
       isClipping = false;
-      progress.textContent = "All coupons clipped!";
+      const count = msg.totalClipped || 0;
+      progress.textContent = `All coupons clipped! (${count} total)`;
     } else if (msg.type === "limit-reached") {
       isClipping = false;
-      progress.textContent = "250 coupon limit reached.";
+      const count = msg.totalClipped || 250;
+      progress.textContent = `250 coupon limit reached. (${count} clipped)`;
     }
   });
 
